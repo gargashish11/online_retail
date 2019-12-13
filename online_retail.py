@@ -1,54 +1,54 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# set up matplotlib
+from pathlib import Path
+from scipy import stats
+from mpl_toolkits.mplot3d import Axes3D
+import joblib as jl
+from sklearn.cluster import KMeans
+from sklearn.utils import shuffle
+from sklearn.preprocessing import StandardScaler
+from dateutil.relativedelta import relativedelta as rd
+import seaborn as sns
+from matplotlib.widgets import RadioButtons
+from statsmodels.robust.robust_linear_model import RLM
+import statsmodels.api as sm
+import pandas as pd
+import numpy as np
 import matplotlib
 
-gui_env = ['Qt5Agg','TKAgg', 'Qt4Agg', 'GTKAgg', 'WXAgg']
+# set up matplotlib
+gui_env = ['Qt5Agg', 'TKAgg', 'Qt4Agg', 'GTKAgg', 'WXAgg']
 for gui in gui_env:
     try:
         print("testing", gui)
         matplotlib.use(gui, warn=False, force=True)
+        from matplotlib import pyplot as plt
         break
     except:
         continue
 print("Using:", matplotlib.get_backend())
 
-# imports
-import numpy as np
-import pandas as pd
-import statsmodels.api as sm
-from statsmodels.robust.robust_linear_model import RLM
-from matplotlib import pyplot as plt
-from matplotlib.widgets import RadioButtons
-import seaborn as sns
-from dateutil.relativedelta import relativedelta as rd
-from sklearn.preprocessing import StandardScaler
-from sklearn.utils import shuffle
-from sklearn.cluster import KMeans
-import joblib as jl
-from mpl_toolkits.mplot3d import Axes3D
-from scipy import stats
-from pathlib import Path
-
 # set up seaborn and other variables
 sns.set()
 
-# modify the statsmodels mode function 
+
+# modify the statsmodels mode function
 def mode(x): return stats.mode(x)[0]
+
 
 # setup number of clusters and random state
 n_clusters = 5
 prng_seed = 1
 
 # read in the data
-basedf = pd.read_csv('online_retail.csv', parse_dates=['InvoiceDate']);
+basedf = pd.read_csv('online_retail.csv', parse_dates=['InvoiceDate'])
 print(basedf.shape)
 
 df = basedf
 df["Total_Price"] = df["Quantity"] * df['Price']
 
-#reduce the accuracy of dates to day
+# reduce the accuracy of dates to day
 df['InvoiceDate'] = df.InvoiceDate.values.astype('datetime64[D]')
 
 # create a reference point for calculating recency and first_purchase
@@ -59,10 +59,10 @@ print(df.head(10))
 print(df.Country.unique())
 print(df.Country.nunique())
 
-#let's focus on the country with biggest customer base
+# let's focus on the country with biggest customer base
 df = df.loc[df['Country'] == 'United Kingdom']
 
-#remove NA's and nulls
+# remove NA's and nulls
 df.isnull().sum(axis=0)
 df = df[pd.notnull(df['Customer ID'])]
 print(len(np.unique(df['Customer ID'])))
@@ -78,7 +78,7 @@ plt.tight_layout()
 plt.show()
 
 # remove some more outliers
-df = df[(df['Quantity'] < 6000) & (df['Price'] < 1500) & (df['Customer ID'] != 18102)];
+df = df[(df['Quantity'] < 6000) & (df['Price'] < 1500) & (df['Customer ID'] != 18102)]
 print(df.shape)
 df = df[~df.StockCode.str.contains('TEST')]
 print(df.describe())
@@ -129,7 +129,7 @@ scaler = StandardScaler()
 rfmf = scaler.fit_transform(rfmdf)
 kcluster = KMeans(n_clusters=n_clusters, init='random', n_jobs=-1, random_state=prng_seed)
 
-#run the KMeans and pickle the data using joblib
+# run the KMeans and pickle the data using joblib
 # klist file stores the cluster allocations
 # and kinertia file stores the MSE aka inertia
 ignore_files = False
@@ -158,15 +158,16 @@ print(" Std: ", np.round(np.std(karr, axis=0, ddof=1), 2))
 
 # assign the clusters
 # add 1 so that the cluster sequence starts from 1
-rfmfdf = shuffle(rfmdf,random_state = kinertia.index(min(kinertia)))
+rfmfdf = shuffle(rfmdf, random_state=kinertia.index(min(kinertia)))
 rfmfdf['clusters'] = klist[kinertia.index(min(kinertia))] + 1
 
-#calculate total sales for contribution from each cluster
+# calculate total sales for contribution from each cluster
 Total_sales = np.sum(rfmfdf.Monetary.values)
 print(Total_sales)
 
-#calculate percentage contribution from each cluster
-clust_sales = rfmfdf.groupby('clusters').agg({'Monetary': lambda x: x.sum() / Total_sales * 100}).reset_index()
+# calculate percentage contribution from each cluster
+clust_sales = rfmfdf.groupby('clusters').agg(
+    {'Monetary': lambda x: x.sum() / Total_sales * 100}).reset_index()
 clust_sales.rename(columns={'Monetary': 'clust_sales_contrib'}, inplace=True)
 print(clust_sales)
 
@@ -238,8 +239,9 @@ for i in range(n_clusters + 1):
 plt.tight_layout()
 plt.show()
 
+
 def histogramfn(metric):
-    hist, xedges, yedges = np.histogram2d(rfmTable[metric], rfmTable.clusters,bins = 5)
+    hist, xedges, yedges = np.histogram2d(rfmTable[metric], rfmTable.clusters, bins=5)
     xpos, ypos = np.meshgrid(xedges[:-1] + 0.25, yedges[:-1] + 0.25, indexing="ij")
     xpos = xpos.ravel()
     ypos = ypos.ravel()
@@ -248,28 +250,33 @@ def histogramfn(metric):
     dx = 1.5 * np.ones_like(zpos)
     dy = 0.9 * np.ones_like(zpos)
     dz = hist.ravel()
-    return xpos, ypos, zpos, dx ,dy ,dz
+    return xpos, ypos, zpos, dx, dy, dz
 
-metrics = ['Recency','Frequency','Monetary','First_Purchase']
+
+metrics = ['Recency', 'Frequency', 'Monetary', 'First_Purchase']
 metric = metrics[0]
 
-fig = plt.figure(figsize=(16,9))
-ax = fig.add_subplot(111,projection='3d')
+fig = plt.figure(figsize=(16, 9))
+ax = fig.add_subplot(111, projection='3d')
 rax = plt.axes([0.15, 0.7, 0.15, 0.15])
 radio = RadioButtons(rax, metrics)
-xpos, ypos, zpos, dx ,dy ,dz = histogramfn('Recency')
-ax.bar3d(xpos, ypos, zpos, dx ,dy ,dz)
+xpos, ypos, zpos, dx, dy, dz = histogramfn('Recency')
+ax.bar3d(xpos, ypos, zpos, dx, dy, dz)
 ax.set_xlabel(metric)
 ax.set_ylabel('Clusters')
 ax.set_yticks(range(1, n_clusters + 1), minor=False)
+
+
 def bar_3d(metric):
     ax.clear()
-    xpos, ypos, zpos, dx ,dy ,dz = histogramfn(metric)
-    ax.bar3d(xpos, ypos, zpos, dx ,dy ,dz)
+    xpos, ypos, zpos, dx, dy, dz = histogramfn(metric)
+    ax.bar3d(xpos, ypos, zpos, dx, dy, dz)
     ax.set_xlabel(metric)
     ax.set_ylabel('Clusters')
     ax.set_yticks(range(1, n_clusters + 1), minor=False)
     plt.draw()
+
+
 radio.on_clicked(bar_3d)
 plt.grid()
 plt.show()
